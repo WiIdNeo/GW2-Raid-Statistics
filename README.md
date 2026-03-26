@@ -11,7 +11,8 @@ As github pages does not support back end data are saved in supabase db
 ## BUGs and To-Do's
 - Mechanic Graphs do not show values
 - On different screensizes vis is broken or wierd
-- Golem Group isn't shown in filter right now
+- Golem Group isn't shown in filter right now (not in DB eather -> Parser Problem)
 - May fixate Colors to Players
 - Make alt account data and main account data become the same graph
+- 
   
