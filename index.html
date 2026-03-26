@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raid Statistics</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./css/style.css" >
+</head>
+<body>
+
+<header>
+    <h1>&#9876; Raid Statistics</h1>
+    <div class="header-actions">
+        <span id="status-indicator">Kein Filter aktiv</span>
+        <button class="btn btn-primary" onclick="openModal()">Filter öffnen</button>
+    </div>
+</header>
+
+<div id="modal" class="modal-overlay" onclick="handleOverlayClick(event)">
+    <div class="modal-content">
+        <h1>Filter</h1>
+
+        <div class="modal-section-label">Gruppe</div>
+        <select id="sel-group">
+            <option value="">— wird geladen… —</option>
+        </select>
+
+        <div class="modal-section-label">Encounter</div>
+        <select id="sel-encounter" disabled>
+            <option value="">Alle Encounter</option>
+        </select>
+
+        <div class="modal-section-label">Phase</div>
+        <select id="sel-phase" disabled>
+            <option value="0">Phase 0 (Gesamt)</option>
+        </select>
+
+        <div>
+            <div class="player-list-header">
+                <div class="modal-section-label" style="margin-bottom:0">Spieler</div>
+                <div class="toggle-row">
+                    <button class="btn btn-ghost btn-sm" onclick="toggleAllPlayers(true)">Alle an</button>
+                    <button class="btn btn-ghost btn-sm" onclick="toggleAllPlayers(false)">Alle aus</button>
+                </div>
+            </div>
+            <div style="height:10px"></div>
+            <div id="player-checklist" class="player-checklist empty">Erst Gruppe wählen</div>
+        </div>
+
+        <div class="modal-buttons">
+            <button class="btn btn-ghost" onclick="closeModal()">Abbrechen</button>
+            <button class="btn btn-accent" onclick="applyFilter()">Laden</button>
+        </div>
+    </div>
+</div>
+
+<div id="empty-state">
+    <div class="big-icon">&#128202;</div>
+    <p>Öffne den Filter und wähle eine Gruppe, um Daten zu laden.</p>
+    <button class="btn btn-primary" onclick="openModal()">Filter öffnen</button>
+</div>
+
+<div id="dashboard">
+    <div class="section-title">DPS</div>
+    <div class="chart-grid">
+        <div class="chart-card"><h3>Total DPS</h3><canvas id="chart-dps"></canvas></div>
+        <div class="chart-card"><h3>Power DPS</h3><canvas id="chart-power-dps"></canvas></div>
+        <div class="chart-card"><h3>Condi DPS</h3><canvas id="chart-condi-dps"></canvas></div>
+    </div>
+
+    <div class="section-title">Defenses</div>
+    <div class="chart-grid">
+        <div class="chart-card"><h3>Damage Taken</h3><canvas id="chart-dmg-taken"></canvas></div>
+        <div class="chart-card"><h3>CC Received (Anzahl)</h3><canvas id="chart-cc-count"></canvas></div>
+        <div class="chart-card"><h3>CC Received (Dauer ms)</h3><canvas id="chart-cc-duration"></canvas></div>
+    </div>
+
+    <div class="section-title">Support</div>
+    <div class="chart-grid">
+        <div class="chart-card"><h3>Rezzes</h3><canvas id="chart-rezzes"></canvas></div>
+        <div class="chart-card"><h3>Rez Time (s)</h3><canvas id="chart-rez-time"></canvas></div>
+        <div class="chart-card"><h3>Condi Cleanses</h3><canvas id="chart-cleanses"></canvas></div>
+        <div class="chart-card"><h3>Boon Strips</h3><canvas id="chart-boon-strips"></canvas></div>
+    </div>
+
+    <div class="section-title">Positioning</div>
+    <div class="chart-grid">
+        <div class="chart-card"><h3>Stack Distance</h3><canvas id="chart-stack-dist"></canvas></div>
+        <div class="chart-card"><h3>Distance to Commander</h3><canvas id="chart-comm-dist"></canvas></div>
+        <div class="chart-card"><h3>Flanking Rate</h3><canvas id="chart-flanking"></canvas></div>
+    </div>
+
+    <div class="section-title">Sonstiges</div>
+    <div class="chart-grid">
+        <div class="chart-card"><h3>Downs</h3><canvas id="chart-downs"></canvas></div>
+        <div class="chart-card"><h3>Deaths</h3><canvas id="chart-deaths"></canvas></div>
+        <div class="chart-card"><h3>Skill Cast Uptime</h3><canvas id="chart-cast-uptime"></canvas></div>
+    </div>
+
+    <div class="section-title">Gespielte Klassen</div>
+    <div class="chart-grid" id="class-charts-grid"></div>
+
+    <div class="section-title">Mechaniken</div>
+    <div class="chart-grid cols-2" id="mechanic-charts-grid"></div>
+</div>
+
+<script src="./js/logic.js"></script>
+</body>
+</html>
