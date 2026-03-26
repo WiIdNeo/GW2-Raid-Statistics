@@ -1,7 +1,7 @@
 # GW2-Raid-Statistics.github.io
 
 ## LICENSE
-- License is as state in LICENSE file, but I ask you to remove the specific data like keys or names
+- License is as stated in LICENSE file, but I ask you to remove the specific data like keys or names
 
 ## Why and what
 This website is part of a practice for my studies.
