@@ -6,6 +6,7 @@
 ## Why and what
 This website is part of a practice for my studies.
 As subject it shows the statistics of my Raid Statics from Guild Wars 2
+As github pages does not support back end data are saved in supabase db
 
 ## BUGs and To-Do's
 - Mechanic Graphs do not show values

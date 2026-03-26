@@ -52,6 +52,18 @@ function colorFor(display) {
 }
 
 // ════════════════════════════════════════════
+// SUCCESS-FILTER
+// ════════════════════════════════════════════
+function getSuccessFilter() {
+    const wins  = document.getElementById('cb-wins').checked;
+    const fails = document.getElementById('cb-fails').checked;
+    if (wins && fails) return null;   // beide → kein Filter nötig
+    if (wins)          return true;
+    if (fails)         return false;
+    return null;
+}
+
+// ════════════════════════════════════════════
 // MODAL
 // ════════════════════════════════════════════
 async function openModal() {
@@ -66,7 +78,6 @@ function handleOverlayClick(e) {
     if (e.target === document.getElementById('modal')) closeModal();
 }
 
-// Escape-Taste schließt Modal
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeModal();
 });
@@ -102,7 +113,6 @@ async function onGroupChange(group) {
     resetPlayerList('Wird geladen…');
     if (!group) return;
 
-    // FIX: Sicherstellen dass Identitäten geladen sind, bevor Farben verwendet werden
     await loadIdentities();
 
     const { data: logData } = await sb
@@ -217,29 +227,43 @@ function getSelectedPlayers() {
 // FILTER ANWENDEN
 // ════════════════════════════════════════════
 async function applyFilter() {
-    const group     = document.getElementById('sel-group').value;
-    const encounter = document.getElementById('sel-encounter').value;
-    const phase     = parseInt(document.getElementById('sel-phase').value) || 0;
-    const selected  = getSelectedPlayers();
+    const group         = document.getElementById('sel-group').value;
+    const encounter     = document.getElementById('sel-encounter').value;
+    const phase         = parseInt(document.getElementById('sel-phase').value) || 0;
+    const selected      = getSelectedPlayers();
+    const successFilter = getSuccessFilter();
+    const winsChecked   = document.getElementById('cb-wins').checked;
+    const failsChecked  = document.getElementById('cb-fails').checked;
 
-    if (!group)           { alert('Bitte eine Gruppe wählen.');              return; }
-    if (!selected.length) { alert('Bitte mindestens einen Spieler wählen.'); return; }
+    if (!group)                        { alert('Bitte eine Gruppe wählen.');              return; }
+    if (!selected.length)              { alert('Bitte mindestens einen Spieler wählen.'); return; }
+    if (!winsChecked && !failsChecked) { alert('Bitte Wins und/oder Fails aktivieren.');  return; }
 
     closeModal();
     setStatus('Lade Daten…<span class="spinner"></span>');
 
     try {
-        // FIX: Absicherung — Identitäten müssen vor dem Rendern geladen sein
         await loadIdentities();
 
+        // ── Alle Logs für Win/Loss-Diagramm (immer ohne success-Filter) ──
+        let allLogsQ = sb.from('logs')
+            .select('id, fight_name, time_start, success')
+            .eq('group_name', group)
+            .order('time_start', { ascending: true });
+        if (encounter) allLogsQ = allLogsQ.eq('fight_name', encounter);
+        const { data: allLogs, error: allLogsErr } = await allLogsQ;
+        if (allLogsErr) throw allLogsErr;
+
+        // ── Gefilterte Logs für alle anderen Charts ──
         let logQ = sb.from('logs')
             .select('id, fight_name, time_start, success')
             .eq('group_name', group)
             .order('time_start', { ascending: true });
-        if (encounter) logQ = logQ.eq('fight_name', encounter);
+        if (encounter)              logQ = logQ.eq('fight_name', encounter);
+        if (successFilter !== null) logQ = logQ.eq('success', successFilter);
         const { data: logs, error: logsErr } = await logQ;
         if (logsErr) throw logsErr;
-        if (!logs.length) { setStatus('Keine Logs gefunden.'); return; }
+        if (!logs.length) { setStatus('Keine Logs für diesen Filter gefunden.'); return; }
 
         const logIds = logs.map(l => l.id);
         const labels = logs.map(l => {
@@ -275,7 +299,7 @@ async function applyFilter() {
         }));
 
         cachedData = {
-            logs, labels,
+            logs, labels, allLogs,
             withDps:   enrich(dpsR.data),
             withStat:  enrich(statR.data),
             withSup:   enrich(supR.data),
@@ -287,7 +311,11 @@ async function applyFilter() {
         renderDashboard(selected);
         document.getElementById('empty-state').style.display = 'none';
         document.getElementById('dashboard').style.display   = 'block';
-        setStatus(`${group}${encounter ? ' · ' + encounter : ''} · Phase ${phase}`);
+
+        const filterLabel = successFilter === true  ? ' · Nur Wins'
+                          : successFilter === false ? ' · Nur Fails'
+                          : '';
+        setStatus(`${group}${encounter ? ' · ' + encounter : ''} · Phase ${phase}${filterLabel}`);
 
     } catch (err) {
         console.error(err);
@@ -300,7 +328,7 @@ async function applyFilter() {
 // ════════════════════════════════════════════
 function renderDashboard(sel) {
     if (!cachedData) return;
-    const { logs, labels, withDps, withStat, withSup, withDef, allRows, mechanics } = cachedData;
+    const { logs, labels, allLogs, withDps, withStat, withSup, withDef, allRows, mechanics } = cachedData;
 
     const ds = (enriched, fn) => sel.map(displayNameSel => ({
         label: displayNameSel,
@@ -334,8 +362,70 @@ function renderDashboard(sel) {
     line('chart-deaths',      labels, ds(withStat, p => p.stats.killed));
     line('chart-cast-uptime', labels, ds(withStat, p => p.stats.skill_cast_uptime));
 
+    buildWinLossChart(allLogs);
     buildClassCharts(allRows, sel);
     buildMechanicCharts(mechanics, allRows, logs, labels, sel);
+}
+
+// ════════════════════════════════════════════
+// WIN / LOSS — Doughnut, immer alle Logs
+// ════════════════════════════════════════════
+function buildWinLossChart(allLogs) {
+    const wins  = allLogs.filter(l => l.success === true).length;
+    const fails = allLogs.filter(l => l.success === false).length;
+    const total = wins + fails;
+    const pct   = total > 0 ? Math.round((wins / total) * 100) : 0;
+
+    const el = document.getElementById('chart-winloss');
+    if (!el) return;
+    if (activeCharts['winloss']) activeCharts['winloss'].destroy();
+
+    const centerTextPlugin = {
+        id: 'centerText',
+        afterDraw(chart) {
+            const { ctx, chartArea: { width, height, left, top } } = chart;
+            ctx.save();
+            ctx.font = 'bold 28px Rajdhani, sans-serif';
+            ctx.fillStyle = '#e8d5ff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${pct}%`, left + width / 2, top + height / 2 - 10);
+            ctx.font = '13px "Exo 2", sans-serif';
+            ctx.fillStyle = '#7a6a9a';
+            ctx.fillText('Win Rate', left + width / 2, top + height / 2 + 18);
+            ctx.restore();
+        }
+    };
+
+    activeCharts['winloss'] = new Chart(el, {
+        type: 'doughnut',
+        plugins: [centerTextPlugin],
+        data: {
+            labels: [`Wins (${wins})`, `Fails (${fails})`],
+            datasets: [{
+                data: [wins || 0, fails || 0],
+                backgroundColor: ['#27ae6088', '#c0392b88'],
+                borderColor:     ['#27ae60',   '#c0392b'],
+                borderWidth: 2,
+                hoverOffset: 6,
+            }]
+        },
+        options: {
+            cutout: '68%',
+            plugins: {
+                legend: { labels: { color: '#e8d5ff', font: { family: 'Exo 2', size: 12 } } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const val = ctx.parsed;
+                            const p   = total > 0 ? Math.round((val / total) * 100) : 0;
+                            return ` ${val} Runs (${p}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 // ════════════════════════════════════════════

@@ -7,7 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0"></script>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./css/style.css" >
+    <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
 
@@ -39,6 +39,22 @@
         </select>
 
         <div>
+            <div class="modal-section-label" style="margin-bottom: 8px">Ergebnis</div>
+            <div class="result-filter-row">
+                <label class="result-check-item win">
+                    <input type="checkbox" id="cb-wins" checked>
+                    <span class="result-dot win"></span>
+                    Wins
+                </label>
+                <label class="result-check-item fail">
+                    <input type="checkbox" id="cb-fails" checked>
+                    <span class="result-dot fail"></span>
+                    Fails
+                </label>
+            </div>
+        </div>
+
+        <div>
             <div class="player-list-header">
                 <div class="modal-section-label" style="margin-bottom:0">Spieler</div>
                 <div class="toggle-row">
@@ -64,6 +80,15 @@
 </div>
 
 <div id="dashboard">
+
+    <div class="section-title">Win / Loss</div>
+    <div class="chart-grid cols-1-center">
+        <div class="chart-card chart-card--winloss">
+            <h3>Win / Loss Ratio (alle Runs)</h3>
+            <canvas id="chart-winloss"></canvas>
+        </div>
+    </div>
+
     <div class="section-title">DPS</div>
     <div class="chart-grid">
         <div class="chart-card"><h3>Total DPS</h3><canvas id="chart-dps"></canvas></div>
