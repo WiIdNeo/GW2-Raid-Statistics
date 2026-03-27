@@ -13,6 +13,38 @@ const COLORS = [
     '#90e0d0','#d090e0','#e0d090','#90d0e0'
 ];
 
+// ── Boon-Definition (Spieler-Tabelle) ────────────────────────
+const PLAYER_BOONS = [
+    { id: 740,   name: 'Might'       },
+    { id: 725,   name: 'Fury'        },
+    { id: 1187,  name: 'Quickness'   },
+    { id: 30328, name: 'Alacrity'    },
+    { id: 717,   name: 'Protection'  },
+    { id: 718,   name: 'Regeneration'},
+    { id: 726,   name: 'Vigor'       },
+    { id: 743,   name: 'Aegis'       },
+    { id: 1122,  name: 'Stability'   },
+    { id: 719,   name: 'Swiftness'   },
+    { id: 26980, name: 'Resistance'  },
+    { id: 873,   name: 'Resolution'  },
+];
+
+// ── Boss-Debuff-Definition (Boss-Tabelle) ─────────────────────
+const BOSS_DEBUFFS = [
+    { id: 736,   name: 'Bleeding'      },
+    { id: 737,   name: 'Burning'       },
+    { id: 861,   name: 'Confusion'     },
+    { id: 19426, name: 'Torment'       },
+    { id: 720,   name: 'Blind'         },
+    { id: 722,   name: 'Chilled'       },
+    { id: 721,   name: 'Crippled'      },
+    { id: 791,   name: 'Fear'          },
+    { id: 727,   name: 'Immobile'      },
+    { id: 26766, name: 'Slow'          },
+    { id: 742,   name: 'Weakness'      },
+    { id: 738,   name: 'Vulnerability' },
+];
+
 let activeCharts = {};
 let colorMap     = {};
 let cachedData   = null;
@@ -212,19 +244,25 @@ async function applyFilter() {
 
         const playerIds = players.map(p => p.id);
 
-        // ── Bosses für health_percent_burned ──────────────────
+        // ── Bosses ────────────────────────────────────────────
         const { data: bossData, error: bossErr } = await sb
             .from('bosses')
-            .select('log_id, health_percent_burned')
+            .select('id, log_id, health_percent_burned')
             .in('log_id', logIds);
         if (bossErr) throw bossErr;
 
-        const [dpsR, statR, supR, defR, mechR] = await Promise.all([
+        const bossIds = (bossData || []).map(b => b.id);
+
+        const [dpsR, statR, supR, defR, mechR, playerBuffR, bossBuffR] = await Promise.all([
             sb.from('player_dps').select('*').in('player_id', playerIds).eq('phase_index', phase),
             sb.from('player_stats').select('*').in('player_id', playerIds).eq('phase_index', phase),
             sb.from('player_support').select('*').in('player_id', playerIds).eq('phase_index', phase),
             sb.from('player_defenses').select('*').in('player_id', playerIds).eq('phase_index', phase),
             sb.from('mechanics').select('*').in('log_id', logIds),
+            sb.from('player_buffs').select('*').in('player_id', playerIds),
+            bossIds.length
+                ? sb.from('boss_buffs').select('*').in('boss_id', bossIds).eq('phase_index', phase)
+                : Promise.resolve({ data: [] }),
         ]);
         [dpsR, statR, supR, defR].forEach(r => { if (r.error) throw r.error; });
 
@@ -234,13 +272,15 @@ async function applyFilter() {
 
         cachedData = {
             logs, labels,
-            withDps:   enrich(dpsR.data),
-            withStat:  enrich(statR.data),
-            withSup:   enrich(supR.data),
-            withDef:   enrich(defR.data),
-            allRows:   players,
-            mechanics: mechR.data,
-            bosses:    bossData || [],
+            withDps:     enrich(dpsR.data),
+            withStat:    enrich(statR.data),
+            withSup:     enrich(supR.data),
+            withDef:     enrich(defR.data),
+            allRows:     players,
+            mechanics:   mechR.data,
+            bosses:      bossData || [],
+            playerBuffs: playerBuffR.data || [],
+            bossBuffs:   bossBuffR.data   || [],
         };
 
         renderDashboard(selected);
@@ -259,7 +299,12 @@ async function applyFilter() {
 // ════════════════════════════════════════════
 function renderDashboard(sel) {
     if (!cachedData) return;
-    const { logs, labels, withDps, withStat, withSup, withDef, allRows, mechanics, bosses } = cachedData;
+    const {
+        logs, labels,
+        withDps, withStat, withSup, withDef,
+        allRows, mechanics, bosses,
+        playerBuffs, bossBuffs,
+    } = cachedData;
 
     const ds = (enriched, fn) => sel.map(account => ({
         label: account,
@@ -312,6 +357,10 @@ function renderDashboard(sel) {
 
     buildClassCharts(allRows, sel);
     buildMechanicCharts(mechanics, allRows, logs, labels, sel);
+
+    // ── BUFF TABELLEN ─────────────────────────────────────────
+    buildPlayerBuffTable(playerBuffs, allRows, logs, sel);
+    buildBossBuffTable(bossBuffs, bosses, logs);
 }
 
 // ════════════════════════════════════════════
@@ -321,10 +370,8 @@ function buildBossHealthChart(bosses, logs, labels) {
     const data = logs.map(log => {
         const entries = bosses.filter(b => b.log_id === log.id);
         if (!entries.length) return null;
-
         const validEntries = entries.filter(b => b.health_percent_burned != null);
         if (!validEntries.length) return null;
-
         const minBurned = Math.min(...validEntries.map(b => b.health_percent_burned));
         return parseFloat((100 - minBurned).toFixed(2));
     });
@@ -496,8 +543,168 @@ function buildMechanicCharts(mechanics, players, logs, labels, sel) {
 }
 
 // ════════════════════════════════════════════
+// SPIELER-BUFF-TABELLE
+// Zeilen = Runs, Spalten = Boons
+// Zellwert = Ø Uptime aller ausgewählten Spieler
+// ════════════════════════════════════════════
+function buildPlayerBuffTable(playerBuffs, players, logs, sel) {
+    const wrap = document.getElementById('player-buff-table-wrap');
+    if (!wrap) return;
+
+    if (!playerBuffs.length) {
+        wrap.innerHTML = '<p class="buff-table-empty">Keine Buff-Daten vorhanden.</p>';
+        return;
+    }
+
+    let html = '<div class="buff-table-scroll"><table class="buff-table">';
+    html += '<thead><tr>';
+    html += '<th class="buff-th-run">Run</th>';
+    html += '<th class="buff-th-result"></th>';
+    PLAYER_BOONS.forEach(b => {
+        html += `<th class="buff-th-icon" title="${b.name}">
+            <span class="buff-icon-placeholder">${b.name.substring(0,3)}</span>
+            <span class="buff-th-label">${b.name}</span>
+        </th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    logs.forEach(log => {
+        const d    = new Date(log.time_start);
+        const date = `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}`;
+
+        const relevantPlayerIds = players
+            .filter(p => p.log_id === log.id && sel.includes(p.account))
+            .map(p => p.id);
+
+        html += '<tr>';
+        html += `<td class="buff-td-run">${date}</td>`;
+        html += `<td class="buff-td-result">
+            <span class="result-badge ${log.success ? 'win' : 'fail'}">
+                ${log.success ? 'WIN' : 'FAIL'}
+            </span>
+        </td>`;
+
+        PLAYER_BOONS.forEach(boon => {
+            const values = playerBuffs
+                .filter(pb => relevantPlayerIds.includes(pb.player_id) && pb.buff_id === boon.id)
+                .map(pb => pb.uptime)
+                .filter(v => v != null);
+
+            if (!values.length) {
+                html += '<td class="buff-td buff-td-empty">—</td>';
+                return;
+            }
+
+            const avg = values.reduce((a, b) => a + b, 0) / values.length;
+            const pct = Math.round(avg * 100) / 100;
+            const color = uptimeColor(pct);
+            html += `<td class="buff-td" style="--cell-color:${color}" title="${boon.name}: ${pct}%">
+                <span class="buff-val">${pct.toFixed(1)}%</span>
+            </td>`;
+        });
+
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    wrap.innerHTML = html;
+}
+
+// ════════════════════════════════════════════
+// BOSS-BUFF-TABELLE
+// Zeilen = Runs, Spalten = Debuffs auf Boss
+// Zellwert = Ø Uptime über alle Boss-Instanzen
+// ════════════════════════════════════════════
+function buildBossBuffTable(bossBuffs, bosses, logs) {
+    const wrap = document.getElementById('boss-buff-table-wrap');
+    if (!wrap) return;
+
+    if (!bossBuffs.length) {
+        wrap.innerHTML = '<p class="buff-table-empty">Keine Boss-Buff-Daten vorhanden.</p>';
+        return;
+    }
+
+    let html = '<div class="buff-table-scroll"><table class="buff-table">';
+    html += '<thead><tr>';
+    html += '<th class="buff-th-run">Run</th>';
+    html += '<th class="buff-th-result"></th>';
+    BOSS_DEBUFFS.forEach(b => {
+        html += `<th class="buff-th-icon" title="${b.name}">
+            <span class="buff-icon-placeholder">${b.name.substring(0,3)}</span>
+            <span class="buff-th-label">${b.name}</span>
+        </th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    logs.forEach(log => {
+        const d    = new Date(log.time_start);
+        const date = `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}`;
+
+        const bossIdsForLog = bosses
+            .filter(b => b.log_id === log.id)
+            .map(b => b.id);
+
+        html += '<tr>';
+        html += `<td class="buff-td-run">${date}</td>`;
+        html += `<td class="buff-td-result">
+            <span class="result-badge ${log.success ? 'win' : 'fail'}">
+                ${log.success ? 'WIN' : 'FAIL'}
+            </span>
+        </td>`;
+
+        BOSS_DEBUFFS.forEach(debuff => {
+            const values = bossBuffs
+                .filter(bb => bossIdsForLog.includes(bb.boss_id) && bb.buff_id === debuff.id)
+                .map(bb => bb.uptime)
+                .filter(v => v != null);
+
+            if (!values.length) {
+                html += '<td class="buff-td buff-td-empty">—</td>';
+                return;
+            }
+
+            const avg = values.reduce((a, b) => a + b, 0) / values.length;
+            const pct = Math.round(avg * 100) / 100;
+            const color = uptimeColor(pct);
+            html += `<td class="buff-td" style="--cell-color:${color}" title="${debuff.name}: ${pct}%">
+                <span class="buff-val">${pct.toFixed(1)}%</span>
+            </td>`;
+        });
+
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    wrap.innerHTML = html;
+}
+
+// ════════════════════════════════════════════
 // HILFSFUNKTIONEN
 // ════════════════════════════════════════════
+
+// Farbe basierend auf Uptime % (rot → orange → gelb → grün)
+function uptimeColor(pct) {
+    if (pct >= 80) {
+        const t = (pct - 80) / 20;
+        return lerpColor('#e0d040', '#50e090', t);
+    } else if (pct >= 50) {
+        const t = (pct - 50) / 30;
+        return lerpColor('#e07f30', '#e0d040', t);
+    } else {
+        const t = pct / 50;
+        return lerpColor('#e05050', '#e07f30', t);
+    }
+}
+
+function lerpColor(hex1, hex2, t) {
+    const r1 = parseInt(hex1.slice(1,3),16), g1 = parseInt(hex1.slice(3,5),16), b1 = parseInt(hex1.slice(5,7),16);
+    const r2 = parseInt(hex2.slice(1,3),16), g2 = parseInt(hex2.slice(3,5),16), b2 = parseInt(hex2.slice(5,7),16);
+    const r = Math.round(r1 + (r2-r1)*t).toString(16).padStart(2,'0');
+    const g = Math.round(g1 + (g2-g1)*t).toString(16).padStart(2,'0');
+    const b = Math.round(b1 + (b2-b1)*t).toString(16).padStart(2,'0');
+    return `#${r}${g}${b}`;
+}
+
 function line(id, labels, datasets) {
     const el = document.getElementById(id);
     if (!el) return;

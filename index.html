@@ -134,7 +134,7 @@
     <div class="chart-grid">
         <div class="chart-card"><h3>Skill Cast Uptime</h3><canvas id="chart-cast-uptime"></canvas></div>
         <div class="chart-card"><h3>Wasted Casts</h3><canvas id="chart-wasted"></canvas></div>
-        <div class="chart-card"><h3>Verschwendete Zeit (ms)</h3><canvas id="chart-time-wasted"></canvas></div>
+        <div class="chart-card"><h3>Verlorene Zeit (ms)</h3><canvas id="chart-time-wasted"></canvas></div>
         <div class="chart-card"><h3>Saved Casts</h3><canvas id="chart-saved"></canvas></div>
         <div class="chart-card"><h3>Gewonnene Zeit (ms)</h3><canvas id="chart-time-saved"></canvas></div>
     </div>
@@ -146,7 +146,21 @@
         <div class="chart-card"><h3>Ø Aktive Conditions</h3><canvas id="chart-avg-conditions"></canvas></div>
     </div>
 
-    <!-- ── SONSTIGES ──────────────────────────────────────── -->
+    <!-- ── SPIELER BUFFS ──────────────────────────────────── -->
+    <div class="section-title">Spieler Buffs</div>
+    <div class="buff-table-card">
+        <p class="buff-table-hint">Ø Uptime aller ausgewählten Spieler pro Run</p>
+        <div id="player-buff-table-wrap"></div>
+    </div>
+
+    <!-- ── BOSS BUFFS / DEBUFFS ───────────────────────────── -->
+    <div class="section-title">Boss Buffs / Debuffs</div>
+    <div class="buff-table-card">
+        <p class="buff-table-hint">Ø Uptime der Debuffs auf dem Boss pro Run</p>
+        <div id="boss-buff-table-wrap"></div>
+    </div>
+
+        <!-- ── SONSTIGES ──────────────────────────────────────── -->
     <div class="section-title">Sonstiges</div>
     <div class="chart-grid">
         <div class="chart-card"><h3>Downs</h3><canvas id="chart-downs"></canvas></div>

@@ -265,3 +265,180 @@ header h1 {
     font-size: 11px;
     margin-bottom: 8px;
 }
+
+/* ════════════════════════════════════════════
+   BUFF-TABELLEN
+   ════════════════════════════════════════════ */
+
+.buff-table-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.buff-table-hint {
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+    margin-bottom: 14px;
+}
+
+.buff-table-empty {
+    color: var(--muted);
+    font-style: italic;
+    font-size: 13px;
+    padding: 20px 0;
+}
+
+/* Horizontales Scrollen wenn Tabelle zu breit */
+.buff-table-scroll {
+    overflow-x: auto;
+}
+.buff-table-scroll::-webkit-scrollbar { height: 5px; }
+.buff-table-scroll::-webkit-scrollbar-track { background: var(--surf2); }
+.buff-table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.buff-table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: max-content;
+    font-size: 12px;
+}
+
+/* Kopfzeile */
+.buff-table thead tr {
+    border-bottom: 2px solid var(--border);
+}
+
+.buff-th-run {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+    padding: 8px 12px 8px 4px;
+    white-space: nowrap;
+    min-width: 90px;
+}
+
+.buff-th-result {
+    padding: 8px 8px;
+    min-width: 60px;
+}
+
+.buff-th-icon {
+    padding: 6px 4px;
+    text-align: center;
+    min-width: 52px;
+    vertical-align: bottom;
+}
+
+/* Platzhalter bis Icons manuell gesetzt werden */
+.buff-icon-placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px; height: 32px;
+    background: var(--surf2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    cursor: default;
+}
+
+.buff-icon {
+    width: 32px; height: 32px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    display: block;
+    margin: 0 auto;
+}
+
+/* Buff-Name unter dem Icon (klein, mehrzeilig erlaubt) */
+.buff-th-label {
+    display: block;
+    font-family: 'Exo 2', sans-serif;
+    font-size: 9px;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 4px;
+    max-width: 52px;
+    word-break: break-word;
+    line-height: 1.2;
+}
+
+/* Datenzeilen */
+.buff-table tbody tr {
+    border-bottom: 1px solid var(--surf2);
+    transition: background 0.15s;
+}
+.buff-table tbody tr:hover {
+    background: rgba(139,47,201,0.08);
+}
+
+.buff-td-run {
+    padding: 8px 12px 8px 4px;
+    font-family: 'Exo 2', sans-serif;
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+}
+
+.buff-td-result {
+    padding: 8px;
+    text-align: center;
+}
+
+/* Win/Fail Badge */
+.result-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 1px;
+}
+.result-badge.win  {
+    background: rgba(80,224,144,0.15);
+    color: #50e090;
+    border: 1px solid rgba(80,224,144,0.3);
+}
+.result-badge.fail {
+    background: rgba(224,80,80,0.15);
+    color: #e05050;
+    border: 1px solid rgba(224,80,80,0.3);
+}
+
+/* Datenzellen — Farbe kommt als CSS-Variable aus JS */
+.buff-td {
+    padding: 6px 4px;
+    text-align: center;
+    position: relative;
+}
+
+.buff-td::before {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border-radius: 3px;
+    background: var(--cell-color, transparent);
+    opacity: 0.18;
+}
+
+.buff-val {
+    position: relative;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px; font-weight: 600;
+    color: var(--cell-color, var(--text));
+    z-index: 1;
+}
+
+.buff-td-empty {
+    color: var(--muted);
+    opacity: 0.5;
+    font-size: 13px;
+}
