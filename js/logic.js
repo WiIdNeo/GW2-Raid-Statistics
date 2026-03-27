@@ -5,70 +5,23 @@ const SUPABASE_URL = 'https://subabdcpfhusxvwowliw.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_h9eXb_whCGnkYgcsdV8HwA_oFOl86mp';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let activeCharts = {};
-let identityMap  = {};  // account → { display_name, color }
-let cachedData   = null;
-
-// ════════════════════════════════════════════
-// IDENTITIES (einmalig laden)
-// ════════════════════════════════════════════
-async function loadIdentities() {
-    if (Object.keys(identityMap).length) return;
-    const { data, error } = await sb
-        .from('player_identities')
-        .select('account, display_name, color');
-    if (error) { console.error('Identity load error:', error); return; }
-    data.forEach(row => {
-        identityMap[row.account] = {
-            display_name: row.display_name,
-            color: row.color || '#aaaaaa'
-        };
-    });
-}
-
-// account → display_name (Fallback: account selbst)
-function displayName(account) {
-    return identityMap[account]?.display_name ?? account;
-}
-
-// 20 distinkte Fallback-Farben
-const FALLBACK_COLORS = [
-    '#e05c5c', '#e0875c', '#e0b45c', '#d4e05c', '#8fe05c',
-    '#5ce07a', '#5ce0b4', '#5cd4e0', '#5c8fe0', '#5c5ce0',
-    '#875ce0', '#b45ce0', '#e05cd4', '#e05c8f', '#c0392b',
-    '#27ae60', '#2980b9', '#8e44ad', '#f39c12', '#16a085'
+const COLORS = [
+    '#ddb308','#8b2fc9','#50e090','#e05050',
+    '#4ec9e0','#e07f30','#a0e040','#e040b0',
+    '#40a0e0','#e0d040','#80e0a0','#c080e0',
+    '#e0a0c0','#a0c0e0','#c0e0a0','#e0c0a0',
+    '#90e0d0','#d090e0','#e0d090','#90d0e0'
 ];
 
-function fallbackColor(display) {
-    let hash = 0;
-    for (let i = 0; i < display.length; i++) hash = display.charCodeAt(i) + ((hash << 5) - hash);
-    return FALLBACK_COLORS[Math.abs(hash) % FALLBACK_COLORS.length];
-}
-
-// display_name → color (aus erstem bekannten Account)
-function colorFor(display) {
-    const entry = Object.values(identityMap).find(v => v.display_name === display);
-    return entry?.color ?? fallbackColor(display);
-}
-
-// ════════════════════════════════════════════
-// SUCCESS-FILTER
-// ════════════════════════════════════════════
-function getSuccessFilter() {
-    const wins  = document.getElementById('cb-wins').checked;
-    const fails = document.getElementById('cb-fails').checked;
-    if (wins && fails) return null;   // beide → kein Filter nötig
-    if (wins)          return true;
-    if (fails)         return false;
-    return null;
-}
+let activeCharts = {};
+let colorMap     = {};  // account → stable color
+let cachedData   = null;
 
 // ════════════════════════════════════════════
 // MODAL
 // ════════════════════════════════════════════
 async function openModal() {
     document.getElementById('modal').classList.add('open');
-    await loadIdentities();
     await loadGroups();
 }
 function closeModal() {
@@ -78,12 +31,8 @@ function handleOverlayClick(e) {
     if (e.target === document.getElementById('modal')) closeModal();
 }
 
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeModal();
-});
-
 // ════════════════════════════════════════════
-// SCHRITT 1 — Gruppen laden
+// SCHRITT 1 — Gruppen laden (einmalig)
 // ════════════════════════════════════════════
 async function loadGroups() {
     const sel = document.getElementById('sel-group');
@@ -101,19 +50,17 @@ async function loadGroups() {
         sel.appendChild(o);
     });
     sel.dataset.loaded = '1';
-    sel.onchange = () => onGroupChange(sel.value);
+    sel.addEventListener('change', () => onGroupChange(sel.value));
 }
 
 // ════════════════════════════════════════════
-// SCHRITT 2 — Gruppe gewählt
+// SCHRITT 2 — Gruppe gewählt → Encounter + Phasen + Spieler
 // ════════════════════════════════════════════
 async function onGroupChange(group) {
     resetEncounter();
     resetPhase();
     resetPlayerList('Wird geladen…');
     if (!group) return;
-
-    await loadIdentities();
 
     const { data: logData } = await sb
         .from('logs').select('id, fight_name')
@@ -129,7 +76,7 @@ async function onGroupChange(group) {
         selEnc.appendChild(o);
     });
     selEnc.disabled = false;
-    selEnc.onchange = () => onEncounterChange(group, selEnc.value);
+    selEnc.addEventListener('change', () => onEncounterChange(group, selEnc.value));
 
     const logIds = logData.map(r => r.id);
     await loadPhases(logIds);
@@ -137,7 +84,7 @@ async function onGroupChange(group) {
 }
 
 // ════════════════════════════════════════════
-// SCHRITT 2b — Encounter gewählt
+// SCHRITT 2b — Encounter gewählt → Spieler + Phasen aktualisieren
 // ════════════════════════════════════════════
 async function onEncounterChange(group, encounter) {
     resetPlayerList('Wird geladen…');
@@ -161,11 +108,9 @@ async function loadPhases(logIds) {
 
     selPhase.innerHTML = '';
     if (data && data.length) {
-        const seen = new Map();
-        data.forEach(p => {
-            if (!seen.has(p.phase_index)) seen.set(p.phase_index, p.name);
-        });
-        seen.forEach((name, idx) => {
+        const seen = {};
+        data.forEach(p => { seen[p.phase_index] = p.name; });
+        Object.entries(seen).forEach(([idx, name]) => {
             const o = document.createElement('option');
             o.value = idx;
             o.textContent = `Phase ${idx} — ${name}`;
@@ -178,37 +123,43 @@ async function loadPhases(logIds) {
 }
 
 // ════════════════════════════════════════════
-// SPIELER — Account-basiert
+// Spieler-Checkliste  (jetzt nach ACCOUNT)
 // ════════════════════════════════════════════
 async function loadPlayers(logIds) {
     const { data, error } = await sb
         .from('players').select('account').in('log_id', logIds);
     if (error) { console.error(error); return; }
 
-    const displayNames = [
-        ...new Set(data.map(r => displayName(r.account)))
-    ].sort();
+    // Eindeutige Accounts (statt player_name)
+    const accounts = [...new Set(data.map(r => r.account))].sort();
 
-    renderPlayerChecklist(displayNames);
+    let colorIdx = Object.keys(colorMap).length;
+    accounts.forEach(acc => {
+        if (!colorMap[acc]) {
+            colorMap[acc] = COLORS[colorIdx % COLORS.length];
+            colorIdx++;
+        }
+    });
+
+    renderPlayerChecklist(accounts);
 }
 
-function renderPlayerChecklist(names) {
+function renderPlayerChecklist(accounts) {
     const cl = document.getElementById('player-checklist');
-    if (!names.length) {
+    if (!accounts.length) {
         cl.className = 'player-checklist empty';
         cl.innerHTML = 'Keine Spieler gefunden';
         return;
     }
     cl.className = 'player-checklist';
     cl.innerHTML = '';
-    names.forEach(name => {
-        const color = colorFor(name);
+    accounts.forEach(acc => {
         const label = document.createElement('label');
         label.className = 'player-check-item';
         label.innerHTML = `
-            <input type="checkbox" value="${name}" checked>
-            <span class="player-dot" style="background:${color}"></span>
-            <span>${name}</span>`;
+            <input type="checkbox" value="${acc}" checked>
+            <span class="player-dot" style="background:${colorMap[acc]}"></span>
+            <span>${acc}</span>`;
         cl.appendChild(label);
     });
 }
@@ -227,43 +178,26 @@ function getSelectedPlayers() {
 // FILTER ANWENDEN
 // ════════════════════════════════════════════
 async function applyFilter() {
-    const group         = document.getElementById('sel-group').value;
-    const encounter     = document.getElementById('sel-encounter').value;
-    const phase         = parseInt(document.getElementById('sel-phase').value) || 0;
-    const selected      = getSelectedPlayers();
-    const successFilter = getSuccessFilter();
-    const winsChecked   = document.getElementById('cb-wins').checked;
-    const failsChecked  = document.getElementById('cb-fails').checked;
+    const group     = document.getElementById('sel-group').value;
+    const encounter = document.getElementById('sel-encounter').value;
+    const phase     = parseInt(document.getElementById('sel-phase').value) || 0;
+    const selected  = getSelectedPlayers(); // jetzt Accounts
 
-    if (!group)                        { alert('Bitte eine Gruppe wählen.');              return; }
-    if (!selected.length)              { alert('Bitte mindestens einen Spieler wählen.'); return; }
-    if (!winsChecked && !failsChecked) { alert('Bitte Wins und/oder Fails aktivieren.');  return; }
+    if (!group)           { alert('Bitte eine Gruppe wählen.');              return; }
+    if (!selected.length) { alert('Bitte mindestens einen Spieler wählen.'); return; }
 
     closeModal();
     setStatus('Lade Daten…<span class="spinner"></span>');
 
     try {
-        await loadIdentities();
-
-        // ── Alle Logs für Win/Loss-Diagramm (immer ohne success-Filter) ──
-        let allLogsQ = sb.from('logs')
-            .select('id, fight_name, time_start, success')
-            .eq('group_name', group)
-            .order('time_start', { ascending: true });
-        if (encounter) allLogsQ = allLogsQ.eq('fight_name', encounter);
-        const { data: allLogs, error: allLogsErr } = await allLogsQ;
-        if (allLogsErr) throw allLogsErr;
-
-        // ── Gefilterte Logs für alle anderen Charts ──
         let logQ = sb.from('logs')
             .select('id, fight_name, time_start, success')
             .eq('group_name', group)
             .order('time_start', { ascending: true });
-        if (encounter)              logQ = logQ.eq('fight_name', encounter);
-        if (successFilter !== null) logQ = logQ.eq('success', successFilter);
+        if (encounter) logQ = logQ.eq('fight_name', encounter);
         const { data: logs, error: logsErr } = await logQ;
         if (logsErr) throw logsErr;
-        if (!logs.length) { setStatus('Keine Logs für diesen Filter gefunden.'); return; }
+        if (!logs.length) { setStatus('Keine Logs gefunden.'); return; }
 
         const logIds = logs.map(l => l.id);
         const labels = logs.map(l => {
@@ -271,16 +205,12 @@ async function applyFilter() {
             return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}`;
         });
 
+        // player_name jetzt auch mitholen — wird als Brücke zu mechanics.actor gebraucht
         const { data: players, error: pErr } = await sb
             .from('players')
-            .select('id, log_id, player_name, account, profession, group_nr')
+            .select('id, log_id, player_name, account, profession')
             .in('log_id', logIds);
         if (pErr) throw pErr;
-
-        const playersWithIdentity = players.map(p => ({
-            ...p,
-            display_name: displayName(p.account)
-        }));
 
         const playerIds = players.map(p => p.id);
 
@@ -293,29 +223,25 @@ async function applyFilter() {
         ]);
         [dpsR, statR, supR, defR].forEach(r => { if (r.error) throw r.error; });
 
-        const enrich = rows => playersWithIdentity.map(p => ({
-            ...p,
-            stats: (rows || []).find(s => s.player_id === p.id) || {}
+        // enrich: join stats auf player via player_id
+        const enrich = rows => players.map(p => ({
+            ...p, stats: (rows || []).find(s => s.player_id === p.id) || {}
         }));
 
         cachedData = {
-            logs, labels, allLogs,
+            logs, labels,
             withDps:   enrich(dpsR.data),
             withStat:  enrich(statR.data),
             withSup:   enrich(supR.data),
             withDef:   enrich(defR.data),
-            allRows:   playersWithIdentity,
+            allRows:   players,
             mechanics: mechR.data,
         };
 
         renderDashboard(selected);
         document.getElementById('empty-state').style.display = 'none';
         document.getElementById('dashboard').style.display   = 'block';
-
-        const filterLabel = successFilter === true  ? ' · Nur Wins'
-                          : successFilter === false ? ' · Nur Fails'
-                          : '';
-        setStatus(`${group}${encounter ? ' · ' + encounter : ''} · Phase ${phase}${filterLabel}`);
+        setStatus(`${group}${encounter ? ' · ' + encounter : ''} · Phase ${phase}`);
 
     } catch (err) {
         console.error(err);
@@ -324,24 +250,21 @@ async function applyFilter() {
 }
 
 // ════════════════════════════════════════════
-// DASHBOARD
+// DASHBOARD RENDERN  (sel = Array von Accounts)
 // ════════════════════════════════════════════
 function renderDashboard(sel) {
     if (!cachedData) return;
-    const { logs, labels, allLogs, withDps, withStat, withSup, withDef, allRows, mechanics } = cachedData;
+    const { logs, labels, withDps, withStat, withSup, withDef, allRows, mechanics } = cachedData;
 
-    const ds = (enriched, fn) => sel.map(displayNameSel => ({
-        label: displayNameSel,
+    // Matcht jetzt über account statt player_name
+    const ds = (enriched, fn) => sel.map(account => ({
+        label: account,
         data: logs.map(log => {
-            const entries = enriched.filter(
-                p => p.log_id === log.id && p.display_name === displayNameSel
-            );
-            if (!entries.length) return null;
-            const values = entries.map(p => fn(p)).filter(v => v != null);
-            return values.length ? values.reduce((a, b) => a + b, 0) : null;
+            const p = enriched.find(p => p.log_id === log.id && p.account === account);
+            return p ? fn(p) : null;
         }),
-        borderColor:     colorFor(displayNameSel),
-        backgroundColor: colorFor(displayNameSel) + '33',
+        borderColor:     colorMap[account] || '#aaa',
+        backgroundColor: (colorMap[account] || '#aaa') + '33',
         tension: 0.3, spanGaps: true, pointRadius: 4,
     }));
 
@@ -362,101 +285,35 @@ function renderDashboard(sel) {
     line('chart-deaths',      labels, ds(withStat, p => p.stats.killed));
     line('chart-cast-uptime', labels, ds(withStat, p => p.stats.skill_cast_uptime));
 
-    buildWinLossChart(allLogs);
     buildClassCharts(allRows, sel);
     buildMechanicCharts(mechanics, allRows, logs, labels, sel);
 }
 
 // ════════════════════════════════════════════
-// WIN / LOSS — Doughnut, immer alle Logs
-// ════════════════════════════════════════════
-function buildWinLossChart(allLogs) {
-    const wins  = allLogs.filter(l => l.success === true).length;
-    const fails = allLogs.filter(l => l.success === false).length;
-    const total = wins + fails;
-    const pct   = total > 0 ? Math.round((wins / total) * 100) : 0;
-
-    const el = document.getElementById('chart-winloss');
-    if (!el) return;
-    if (activeCharts['winloss']) activeCharts['winloss'].destroy();
-
-    const centerTextPlugin = {
-        id: 'centerText',
-        afterDraw(chart) {
-            const { ctx, chartArea: { width, height, left, top } } = chart;
-            ctx.save();
-            ctx.font = 'bold 28px Rajdhani, sans-serif';
-            ctx.fillStyle = '#e8d5ff';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(`${pct}%`, left + width / 2, top + height / 2 - 10);
-            ctx.font = '13px "Exo 2", sans-serif';
-            ctx.fillStyle = '#7a6a9a';
-            ctx.fillText('Win Rate', left + width / 2, top + height / 2 + 18);
-            ctx.restore();
-        }
-    };
-
-    activeCharts['winloss'] = new Chart(el, {
-        type: 'doughnut',
-        plugins: [centerTextPlugin],
-        data: {
-            labels: [`Wins (${wins})`, `Fails (${fails})`],
-            datasets: [{
-                data: [wins || 0, fails || 0],
-                backgroundColor: ['#27ae6088', '#c0392b88'],
-                borderColor:     ['#27ae60',   '#c0392b'],
-                borderWidth: 2,
-                hoverOffset: 6,
-            }]
-        },
-        options: {
-            cutout: '68%',
-            plugins: {
-                legend: { labels: { color: '#e8d5ff', font: { family: 'Exo 2', size: 12 } } },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => {
-                            const val = ctx.parsed;
-                            const p   = total > 0 ? Math.round((val / total) * 100) : 0;
-                            return ` ${val} Runs (${p}%)`;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-// ════════════════════════════════════════════
-// KLASSEN-PIE
+// KLASSEN-PIE  (nach Account gruppiert)
 // ════════════════════════════════════════════
 function buildClassCharts(players, sel) {
     const grid = document.getElementById('class-charts-grid');
     grid.innerHTML = '';
-    sel.forEach((displayNameSel, i) => {
+    sel.forEach((account, i) => {
         const counts = {};
-        players
-            .filter(p => p.display_name === displayNameSel)
-            .forEach(p => { counts[p.profession] = (counts[p.profession] || 0) + 1; });
+        // Alle Einträge dieses Accounts über alle Logs zählen
+        players.filter(p => p.account === account)
+               .forEach(p => { counts[p.profession] = (counts[p.profession] || 0) + 1; });
 
         const card = document.createElement('div');
         card.className = 'chart-card';
-        card.innerHTML = `<h3>${displayNameSel}</h3><canvas id="cc-${i}"></canvas>`;
+        card.innerHTML = `<h3>${account}</h3><canvas id="cc-${i}"></canvas>`;
         grid.appendChild(card);
 
-        const key = `cls-${displayNameSel}`;
+        const key = `cls-${account}`;
         if (activeCharts[key]) activeCharts[key].destroy();
         activeCharts[key] = new Chart(document.getElementById(`cc-${i}`), {
             type: 'pie',
             data: {
                 labels: Object.keys(counts),
                 datasets: [{ data: Object.values(counts),
-                    backgroundColor: Object.keys(counts).map((_, idx) => {
-                        const hue = (idx * 47) % 360;
-                        return `hsl(${hue},65%,55%)`;
-                    }),
-                    borderColor: '#0a0212', borderWidth: 2 }]
+                    backgroundColor: COLORS, borderColor: '#0a0212', borderWidth: 2 }]
             },
             options: { plugins: { legend: { labels: {
                 color: '#e8d5ff', font: { family: 'Exo 2', size: 11 }
@@ -466,7 +323,7 @@ function buildClassCharts(players, sel) {
 }
 
 // ════════════════════════════════════════════
-// MECHANIK-BALKEN
+// MECHANIK-BALKEN  (account → player_name → actor)
 // ════════════════════════════════════════════
 function buildMechanicCharts(mechanics, players, logs, labels, sel) {
     const grid = document.getElementById('mechanic-charts-grid');
@@ -475,22 +332,21 @@ function buildMechanicCharts(mechanics, players, logs, labels, sel) {
 
     const mechNames = [...new Set(mechanics.map(m => m.mechanic_name))];
     mechNames.forEach((mechName, mi) => {
-        const datasets = sel.map(displayNameSel => ({
-            label: displayNameSel,
+        const datasets = sel.map(account => ({
+            label: account,
             data: logs.map(log => {
-                const accounts = players
-                    .filter(p => p.log_id === log.id && p.display_name === displayNameSel)
-                    .map(p => p.account);
+                // Alle Charakter-Namen dieses Accounts in diesem Log
+                const charNames = players
+                    .filter(p => p.log_id === log.id && p.account === account)
+                    .map(p => p.player_name);
                 return mechanics
-                    .filter(m =>
-                        m.log_id === log.id &&
-                        m.mechanic_name === mechName &&
-                        accounts.includes(m.actor)
-                    )
-                    .reduce((s, m) => s + (m.hits ?? 0), 0);
+                    .filter(m => m.log_id === log.id
+                              && m.mechanic_name === mechName
+                              && charNames.includes(m.actor))
+                    .reduce((s, m) => s + m.hits, 0);
             }),
-            backgroundColor: colorFor(displayNameSel) + 'aa',
-            borderColor:      colorFor(displayNameSel),
+            backgroundColor: (colorMap[account] || '#aaa') + 'aa',
+            borderColor:      colorMap[account] || '#aaa',
             borderWidth: 1,
         }));
 
@@ -543,7 +399,6 @@ function resetEncounter() {
     const s = document.getElementById('sel-encounter');
     s.innerHTML = '<option value="">Alle Encounter</option>';
     s.disabled = true;
-    s.onchange = null;
 }
 function resetPhase() {
     const s = document.getElementById('sel-phase');
