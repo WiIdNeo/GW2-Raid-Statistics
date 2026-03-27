@@ -81,36 +81,47 @@
 
 <div id="dashboard">
 
+    <!-- ── WIN / LOSS ─────────────────────────────────────── -->
     <div class="section-title">Win / Loss</div>
-    <div class="chart-grid cols-1-center">
+    <div class="chart-grid cols-2 winloss-row">
         <div class="chart-card chart-card--winloss">
             <h3>Win / Loss Ratio (alle Runs)</h3>
             <canvas id="chart-winloss"></canvas>
         </div>
+        <div class="chart-card chart-card--boss-health">
+            <h3>Verbleibende Boss-HP (%)</h3>
+            <canvas id="chart-boss-health"></canvas>
+        </div>
     </div>
 
+    <!-- ── DPS ────────────────────────────────────────────── -->
     <div class="section-title">DPS</div>
     <div class="chart-grid">
         <div class="chart-card"><h3>Total DPS</h3><canvas id="chart-dps"></canvas></div>
         <div class="chart-card"><h3>Power DPS</h3><canvas id="chart-power-dps"></canvas></div>
         <div class="chart-card"><h3>Condi DPS</h3><canvas id="chart-condi-dps"></canvas></div>
+        <div class="chart-card"><h3>Breakbar Damage</h3><canvas id="chart-breakbar-dmg"></canvas></div>
     </div>
 
+    <!-- ── DEFENSES ───────────────────────────────────────── -->
     <div class="section-title">Defenses</div>
     <div class="chart-grid">
         <div class="chart-card"><h3>Damage Taken</h3><canvas id="chart-dmg-taken"></canvas></div>
         <div class="chart-card"><h3>CC Received (Anzahl)</h3><canvas id="chart-cc-count"></canvas></div>
         <div class="chart-card"><h3>CC Received (Dauer ms)</h3><canvas id="chart-cc-duration"></canvas></div>
+        <div class="chart-card"><h3>Boon Strips erhalten</h3><canvas id="chart-boon-strips-taken"></canvas></div>
     </div>
 
+    <!-- ── SUPPORT ────────────────────────────────────────── -->
     <div class="section-title">Support</div>
     <div class="chart-grid">
         <div class="chart-card"><h3>Rezzes</h3><canvas id="chart-rezzes"></canvas></div>
         <div class="chart-card"><h3>Rez Time (s)</h3><canvas id="chart-rez-time"></canvas></div>
         <div class="chart-card"><h3>Condi Cleanses</h3><canvas id="chart-cleanses"></canvas></div>
-        <div class="chart-card"><h3>Boon Strips</h3><canvas id="chart-boon-strips"></canvas></div>
+        <div class="chart-card"><h3>Boon Strips ausgeteilt</h3><canvas id="chart-boon-strips"></canvas></div>
     </div>
 
+    <!-- ── POSITIONING ────────────────────────────────────── -->
     <div class="section-title">Positioning</div>
     <div class="chart-grid">
         <div class="chart-card"><h3>Stack Distance</h3><canvas id="chart-stack-dist"></canvas></div>
@@ -118,18 +129,38 @@
         <div class="chart-card"><h3>Flanking Rate</h3><canvas id="chart-flanking"></canvas></div>
     </div>
 
+    <!-- ── CAST EFFIZIENZ ─────────────────────────────────── -->
+    <div class="section-title">Cast Effizienz</div>
+    <div class="chart-grid">
+        <div class="chart-card"><h3>Skill Cast Uptime</h3><canvas id="chart-cast-uptime"></canvas></div>
+        <div class="chart-card"><h3>Verschwendete Casts</h3><canvas id="chart-wasted"></canvas></div>
+        <div class="chart-card"><h3>Verschwendete Zeit (ms)</h3><canvas id="chart-time-wasted"></canvas></div>
+        <div class="chart-card"><h3>Gespeicherte Casts</h3><canvas id="chart-saved"></canvas></div>
+        <div class="chart-card"><h3>Gespeicherte Zeit (ms)</h3><canvas id="chart-time-saved"></canvas></div>
+    </div>
+
+    <!-- ── BOONS & CONDITIONS ─────────────────────────────── -->
+    <div class="section-title">Boons &amp; Conditions</div>
+    <div class="chart-grid">
+        <div class="chart-card"><h3>Ø Aktive Boons</h3><canvas id="chart-avg-boons"></canvas></div>
+        <div class="chart-card"><h3>Ø Aktive Conditions</h3><canvas id="chart-avg-conditions"></canvas></div>
+    </div>
+
+    <!-- ── SONSTIGES ──────────────────────────────────────── -->
     <div class="section-title">Sonstiges</div>
     <div class="chart-grid">
         <div class="chart-card"><h3>Downs</h3><canvas id="chart-downs"></canvas></div>
         <div class="chart-card"><h3>Deaths</h3><canvas id="chart-deaths"></canvas></div>
-        <div class="chart-card"><h3>Skill Cast Uptime</h3><canvas id="chart-cast-uptime"></canvas></div>
     </div>
 
+    <!-- ── KLASSEN ────────────────────────────────────────── -->
     <div class="section-title">Gespielte Klassen</div>
     <div class="chart-grid" id="class-charts-grid"></div>
 
+    <!-- ── MECHANIKEN ─────────────────────────────────────── -->
     <div class="section-title">Mechaniken</div>
     <div class="chart-grid cols-2" id="mechanic-charts-grid"></div>
+
 </div>
 
 <script src="./js/logic.js"></script>

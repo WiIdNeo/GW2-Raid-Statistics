@@ -6,13 +6,16 @@
 ## Why and what
 This website is part of a practice for my studies.
 As subject it shows the statistics of my Raid Statics from Guild Wars 2
-As github pages does not support back end data are saved in supabase db
 
 ## BUGs and To-Do's
-- Mechanic Graphs do not show values
 - On different screensizes vis is broken or wierd
-- Golem Group isn't shown in filter right now (not in DB eather -> Parser Problem)
-- May fixate Colors to Players
-- Make alt account data and main account data become the same graph
+- Golem Group isn't shown in filter right now
+- May fixate Colors to Players 
+- Add green colors to random colors
+- Some Mechanic Graphs show suspect values
+- Still some Data missing
+- Add Funktion to redirect to specific log
+- Class-Usage Graphs resize
+- Add funktion to track player Buffs by having a good overview
+- Same for boss buffs
 - 
-  

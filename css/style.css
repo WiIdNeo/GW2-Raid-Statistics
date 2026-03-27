@@ -236,15 +236,32 @@ header h1 {
 .result-dot.win  { background: #27ae60; box-shadow: 0 0 6px #27ae6088; }
 .result-dot.fail { background: #c0392b; box-shadow: 0 0 6px #c0392b88; }
 
-/* Win/Loss Diagramm — zentriert, begrenzte Breite */
-.chart-grid.cols-1-center {
-    display: flex;
-    justify-content: center;
-}
-.chart-card--winloss {
-    width: 340px;
-    flex-shrink: 0;
+/* ── WIN / LOSS ROW ── */
+.chart-grid.cols-2.winloss-row {
+    grid-template-columns: 1fr 1fr;
+    margin: 0 40px;
+    gap: 24px;
 }
 .chart-card--winloss canvas {
-    max-height: 280px;
+    max-height: 260px;
+    margin: 0 auto;
+    display: block;
+}
+.chart-card--boss-health canvas {
+    max-height: 260px;
+}
+
+/* ── KLASSEN-GRID ── */
+#class-charts-grid {
+    grid-template-columns: repeat(6, 1fr);
+}
+#class-charts-grid .chart-card {
+    padding: 12px;
+}
+#class-charts-grid .chart-card:hover {
+    border-color: var(--border);
+}
+#class-charts-grid .chart-card h3 {
+    font-size: 11px;
+    margin-bottom: 8px;
 }

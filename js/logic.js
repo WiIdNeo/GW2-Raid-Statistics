@@ -14,7 +14,7 @@ const COLORS = [
 ];
 
 let activeCharts = {};
-let colorMap     = {};  // account → stable color
+let colorMap     = {};
 let cachedData   = null;
 
 // ════════════════════════════════════════════
@@ -32,7 +32,7 @@ function handleOverlayClick(e) {
 }
 
 // ════════════════════════════════════════════
-// SCHRITT 1 — Gruppen laden (einmalig)
+// SCHRITT 1 — Gruppen laden
 // ════════════════════════════════════════════
 async function loadGroups() {
     const sel = document.getElementById('sel-group');
@@ -54,7 +54,7 @@ async function loadGroups() {
 }
 
 // ════════════════════════════════════════════
-// SCHRITT 2 — Gruppe gewählt → Encounter + Phasen + Spieler
+// SCHRITT 2 — Gruppe gewählt
 // ════════════════════════════════════════════
 async function onGroupChange(group) {
     resetEncounter();
@@ -84,7 +84,7 @@ async function onGroupChange(group) {
 }
 
 // ════════════════════════════════════════════
-// SCHRITT 2b — Encounter gewählt → Spieler + Phasen aktualisieren
+// SCHRITT 2b — Encounter gewählt
 // ════════════════════════════════════════════
 async function onEncounterChange(group, encounter) {
     resetPlayerList('Wird geladen…');
@@ -123,14 +123,13 @@ async function loadPhases(logIds) {
 }
 
 // ════════════════════════════════════════════
-// Spieler-Checkliste  (jetzt nach ACCOUNT)
+// Spieler-Checkliste
 // ════════════════════════════════════════════
 async function loadPlayers(logIds) {
     const { data, error } = await sb
         .from('players').select('account').in('log_id', logIds);
     if (error) { console.error(error); return; }
 
-    // Eindeutige Accounts (statt player_name)
     const accounts = [...new Set(data.map(r => r.account))].sort();
 
     let colorIdx = Object.keys(colorMap).length;
@@ -181,7 +180,7 @@ async function applyFilter() {
     const group     = document.getElementById('sel-group').value;
     const encounter = document.getElementById('sel-encounter').value;
     const phase     = parseInt(document.getElementById('sel-phase').value) || 0;
-    const selected  = getSelectedPlayers(); // jetzt Accounts
+    const selected  = getSelectedPlayers();
 
     if (!group)           { alert('Bitte eine Gruppe wählen.');              return; }
     if (!selected.length) { alert('Bitte mindestens einen Spieler wählen.'); return; }
@@ -205,7 +204,6 @@ async function applyFilter() {
             return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}`;
         });
 
-        // player_name jetzt auch mitholen — wird als Brücke zu mechanics.actor gebraucht
         const { data: players, error: pErr } = await sb
             .from('players')
             .select('id, log_id, player_name, account, profession')
@@ -213,6 +211,13 @@ async function applyFilter() {
         if (pErr) throw pErr;
 
         const playerIds = players.map(p => p.id);
+
+        // ── Bosses für health_percent_burned ──────────────────
+        const { data: bossData, error: bossErr } = await sb
+            .from('bosses')
+            .select('log_id, health_percent_burned')
+            .in('log_id', logIds);
+        if (bossErr) throw bossErr;
 
         const [dpsR, statR, supR, defR, mechR] = await Promise.all([
             sb.from('player_dps').select('*').in('player_id', playerIds).eq('phase_index', phase),
@@ -223,7 +228,6 @@ async function applyFilter() {
         ]);
         [dpsR, statR, supR, defR].forEach(r => { if (r.error) throw r.error; });
 
-        // enrich: join stats auf player via player_id
         const enrich = rows => players.map(p => ({
             ...p, stats: (rows || []).find(s => s.player_id === p.id) || {}
         }));
@@ -236,6 +240,7 @@ async function applyFilter() {
             withDef:   enrich(defR.data),
             allRows:   players,
             mechanics: mechR.data,
+            bosses:    bossData || [],
         };
 
         renderDashboard(selected);
@@ -250,13 +255,12 @@ async function applyFilter() {
 }
 
 // ════════════════════════════════════════════
-// DASHBOARD RENDERN  (sel = Array von Accounts)
+// DASHBOARD RENDERN
 // ════════════════════════════════════════════
 function renderDashboard(sel) {
     if (!cachedData) return;
-    const { logs, labels, withDps, withStat, withSup, withDef, allRows, mechanics } = cachedData;
+    const { logs, labels, withDps, withStat, withSup, withDef, allRows, mechanics, bosses } = cachedData;
 
-    // Matcht jetzt über account statt player_name
     const ds = (enriched, fn) => sel.map(account => ({
         label: account,
         data: logs.map(log => {
@@ -268,36 +272,155 @@ function renderDashboard(sel) {
         tension: 0.3, spanGaps: true, pointRadius: 4,
     }));
 
-    line('chart-dps',         labels, ds(withDps,  p => p.stats.dps));
-    line('chart-power-dps',   labels, ds(withDps,  p => p.stats.power_dps));
-    line('chart-condi-dps',   labels, ds(withDps,  p => p.stats.condi_dps));
-    line('chart-dmg-taken',   labels, ds(withDef,  p => p.stats.damage_taken));
-    line('chart-cc-count',    labels, ds(withDef,  p => p.stats.received_crowd_control));
-    line('chart-cc-duration', labels, ds(withDef,  p => p.stats.received_crowd_control_duration));
-    line('chart-rezzes',      labels, ds(withSup,  p => p.stats.resurrects));
-    line('chart-rez-time',    labels, ds(withSup,  p => p.stats.resurrect_time));
-    line('chart-cleanses',    labels, ds(withSup,  p => p.stats.condi_cleanse));
-    line('chart-boon-strips', labels, ds(withSup,  p => p.stats.boon_strips));
-    line('chart-stack-dist',  labels, ds(withStat, p => p.stats.stack_dist));
-    line('chart-comm-dist',   labels, ds(withStat, p => p.stats.dist_to_com));
-    line('chart-flanking',    labels, ds(withStat, p => p.stats.flanking_rate));
-    line('chart-downs',       labels, ds(withStat, p => p.stats.downed));
-    line('chart-deaths',      labels, ds(withStat, p => p.stats.killed));
-    line('chart-cast-uptime', labels, ds(withStat, p => p.stats.skill_cast_uptime));
+    // ── DPS ───────────────────────────────────────────────────
+    line('chart-dps',           labels, ds(withDps, p => p.stats.dps));
+    line('chart-power-dps',     labels, ds(withDps, p => p.stats.power_dps));
+    line('chart-condi-dps',     labels, ds(withDps, p => p.stats.condi_dps));
+    line('chart-breakbar-dmg',  labels, ds(withDps, p => p.stats.breakbar_damage));
+
+    // ── DEFENSES ──────────────────────────────────────────────
+    line('chart-dmg-taken',         labels, ds(withDef, p => p.stats.damage_taken));
+    line('chart-cc-count',          labels, ds(withDef, p => p.stats.received_crowd_control));
+    line('chart-cc-duration',       labels, ds(withDef, p => p.stats.received_crowd_control_duration));
+    line('chart-boon-strips-taken', labels, ds(withDef, p => p.stats.boon_strips));
+
+    // ── SUPPORT ───────────────────────────────────────────────
+    line('chart-rezzes',            labels, ds(withSup, p => p.stats.resurrects));
+    line('chart-rez-time',          labels, ds(withSup, p => p.stats.resurrect_time));
+    line('chart-cleanses',          labels, ds(withSup, p => p.stats.condi_cleanse));
+    line('chart-boon-strips',       labels, ds(withSup, p => p.stats.boon_strips));
+
+    // ── STATS ─────────────────────────────────────────────────
+    line('chart-stack-dist',        labels, ds(withStat, p => p.stats.stack_dist));
+    line('chart-comm-dist',         labels, ds(withStat, p => p.stats.dist_to_com));
+    line('chart-flanking',          labels, ds(withStat, p => p.stats.flanking_rate));
+    line('chart-downs',             labels, ds(withStat, p => p.stats.downed));
+    line('chart-deaths',            labels, ds(withStat, p => p.stats.killed));
+    line('chart-cast-uptime',       labels, ds(withStat, p => p.stats.skill_cast_uptime));
+    line('chart-wasted',            labels, ds(withStat, p => p.stats.wasted));
+    line('chart-time-wasted',       labels, ds(withStat, p => p.stats.time_wasted));
+    line('chart-saved',             labels, ds(withStat, p => p.stats.saved));
+    line('chart-time-saved',        labels, ds(withStat, p => p.stats.time_saved));
+    line('chart-avg-boons',         labels, ds(withStat, p => p.stats.avg_active_boons));
+    line('chart-avg-conditions',    labels, ds(withStat, p => p.stats.avg_active_conditions));
+
+    // ── BOSS HEALTH ───────────────────────────────────────────
+    buildBossHealthChart(bosses, logs, labels);
+
+    // ── WIN / LOSS ────────────────────────────────────────────
+    buildWinLossChart(logs);
 
     buildClassCharts(allRows, sel);
     buildMechanicCharts(mechanics, allRows, logs, labels, sel);
 }
 
 // ════════════════════════════════════════════
-// KLASSEN-PIE  (nach Account gruppiert)
+// BOSS HEALTH CHART
+// ════════════════════════════════════════════
+function buildBossHealthChart(bosses, logs, labels) {
+    const data = logs.map(log => {
+        const entries = bosses.filter(b => b.log_id === log.id);
+        if (!entries.length) return null;
+
+        const validEntries = entries.filter(b => b.health_percent_burned != null);
+        if (!validEntries.length) return null;
+
+        const minBurned = Math.min(...validEntries.map(b => b.health_percent_burned));
+        return parseFloat((100 - minBurned).toFixed(2));
+    });
+
+    const el = document.getElementById('chart-boss-health');
+    if (!el) return;
+    if (activeCharts['boss-health']) activeCharts['boss-health'].destroy();
+    activeCharts['boss-health'] = new Chart(el, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Verbleibende Boss-HP (%)',
+                data,
+                borderColor: '#e05050',
+                backgroundColor: '#e0505033',
+                tension: 0.3, spanGaps: true, pointRadius: 4, fill: true,
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { ticks: { color: '#7a6a9a', font: { size: 11 } }, grid: { color: '#1a0337' } },
+                y: {
+                    ticks: { color: '#7a6a9a', callback: v => v + '%' },
+                    grid: { color: '#1a0337' },
+                    beginAtZero: true, max: 100,
+                }
+            },
+            plugins: { legend: { labels: {
+                color: '#e8d5ff', font: { family: 'Exo 2', size: 11 }, boxWidth: 12
+            }}}
+        }
+    });
+}
+
+// ════════════════════════════════════════════
+// WIN / LOSS DONUT
+// ════════════════════════════════════════════
+function buildWinLossChart(logs) {
+    const wins  = logs.filter(l => l.success).length;
+    const fails = logs.length - wins;
+    const rate  = logs.length ? Math.round((wins / logs.length) * 100) : 0;
+
+    const el = document.getElementById('chart-winloss');
+    if (!el) return;
+    if (activeCharts['winloss']) activeCharts['winloss'].destroy();
+
+    const centerTextPlugin = {
+        id: 'center-text',
+        beforeDraw(chart) {
+            const { ctx, chartArea: { top, bottom, left, right } } = chart;
+            const cx = (left + right) / 2;
+            const cy = (top + bottom) / 2;
+            ctx.save();
+            ctx.font = 'bold 28px Rajdhani';
+            ctx.fillStyle = '#e8d5ff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${rate}%`, cx, cy - 10);
+            ctx.font = '13px Exo 2';
+            ctx.fillStyle = '#7a6a9a';
+            ctx.fillText(`${wins} / ${logs.length} Wins`, cx, cy + 18);
+            ctx.restore();
+        }
+    };
+
+    activeCharts['winloss'] = new Chart(el, {
+        type: 'doughnut',
+        data: {
+            labels: ['Wins', 'Fails'],
+            datasets: [{
+                data: [wins, fails],
+                backgroundColor: ['#50e090', '#e05050'],
+                borderColor:     ['#0a0212'],
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            cutout: '70%',
+            plugins: {
+                legend: { labels: { color: '#e8d5ff', font: { family: 'Exo 2', size: 11 } } },
+            }
+        },
+        plugins: [centerTextPlugin]
+    });
+}
+
+// ════════════════════════════════════════════
+// KLASSEN-PIE
 // ════════════════════════════════════════════
 function buildClassCharts(players, sel) {
     const grid = document.getElementById('class-charts-grid');
     grid.innerHTML = '';
     sel.forEach((account, i) => {
         const counts = {};
-        // Alle Einträge dieses Accounts über alle Logs zählen
         players.filter(p => p.account === account)
                .forEach(p => { counts[p.profession] = (counts[p.profession] || 0) + 1; });
 
@@ -323,7 +446,7 @@ function buildClassCharts(players, sel) {
 }
 
 // ════════════════════════════════════════════
-// MECHANIK-BALKEN  (account → player_name → actor)
+// MECHANIK-BALKEN
 // ════════════════════════════════════════════
 function buildMechanicCharts(mechanics, players, logs, labels, sel) {
     const grid = document.getElementById('mechanic-charts-grid');
@@ -335,7 +458,6 @@ function buildMechanicCharts(mechanics, players, logs, labels, sel) {
         const datasets = sel.map(account => ({
             label: account,
             data: logs.map(log => {
-                // Alle Charakter-Namen dieses Accounts in diesem Log
                 const charNames = players
                     .filter(p => p.log_id === log.id && p.account === account)
                     .map(p => p.player_name);
